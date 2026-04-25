@@ -7,9 +7,10 @@ from pathlib import Path
 from app.bot.telegram_bot import TelegramReviewBot
 from app.common.committed_cache import CommittedCodeCache
 from app.common.config import CANONICAL_ENV_CONTRACT, load_env_file, load_settings
+from app.common.logging_utils import log_event, setup_logger
 from app.common.subprocess_utils import run_cmd
 from app.ingest.audit_runner import ChatHistoryReviewRunner
-from app.ingest.chatgpt_detector import ChatGPTSourceDetector
+from app.ingest.chatgpt_detector import ChatGPTSourceDetector, short_source_id
 
 
 def _env_keys(path: Path) -> list[str]:
@@ -32,6 +33,11 @@ def main() -> None:
 
     review = sub.add_parser("review")
     review.add_argument("source_id_or_path")
+
+    archive = sub.add_parser("archive-source")
+    archive.add_argument("source_ids", nargs="+")
+    archive.add_argument("--reason", default="manual_completed_by_user")
+    archive.add_argument("--operator", default="codex")
 
     sub.add_parser("status")
     sub.add_parser("env-audit")
@@ -71,7 +77,23 @@ def main() -> None:
             print(json.dumps(data, ensure_ascii=False, indent=2))
         else:
             for record in records:
-                print(f"{record.source_id}\t{record.source_type}\t{record.display_name}\t{record.rough_summary}")
+                print(f"{short_source_id(record.source_id)}\t{record.source_id}\t{record.source_type}\t{record.display_name}\t{record.rough_summary}\t/review {short_source_id(record.source_id)}")
+        return
+
+    if args.cmd == "archive-source":
+        settings.ensure_runtime_dirs()
+        detector = ChatGPTSourceDetector(settings.chatgpt_export_root, settings.state_root / "chatgpt_sources.json")
+        archived = detector.archive_sources(args.source_ids, reason=args.reason, operator=args.operator)
+        logger = setup_logger("knowledge_bot_sources", settings.log_root)
+        for event in archived:
+            log_event(
+                logger,
+                event="source_archived",
+                source_id=event.get("source_id", ""),
+                status="archived",
+                summary=f"reason={args.reason} operator={args.operator}",
+            )
+        print(json.dumps({"archived": archived}, ensure_ascii=False, indent=2))
         return
 
     if args.cmd == "review":

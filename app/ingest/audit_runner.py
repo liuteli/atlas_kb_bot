@@ -121,6 +121,11 @@ class ChatHistoryReviewRunner:
         for record in candidates:
             if record.source_id == source_id_or_path:
                 return record
+        prefix_matches = [record for record in candidates if record.source_id.startswith(source_id_or_path)]
+        if len(prefix_matches) == 1:
+            return prefix_matches[0]
+        if len(prefix_matches) > 1:
+            raise KeyError(f"ambiguous source id prefix: {source_id_or_path}")
         path = Path(source_id_or_path)
         if path.exists():
             source_type = "multipart_md_dir" if path.is_dir() else path.suffix.lower().lstrip(".")

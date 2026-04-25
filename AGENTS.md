@@ -15,7 +15,9 @@ This file governs `/Users/liuteli/infra/docker/knowledge-bot`.
 
 ## Python Command Safety
 
-Do not treat every `python3` command as automatically safe. Auto-approval only applies to bounded validation commands such as:
+Within Repo B, `python3 ...` commands that are read-only, validation-only, or local bot operation commands may be executed without asking for another user confirmation. This includes compile, unittest, dry-run, help, detector/status checks, and local CLI validation.
+
+Do not treat every `python3` command as risk-free. High-risk Python commands that write broad state, send external requests, mutate repositories, or apply patches still require careful review. Auto-approval is intended for bounded validation commands such as:
 
 - `python3 -m py_compile ...`
 - `python3 -m compileall ...`

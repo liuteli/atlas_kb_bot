@@ -10,7 +10,7 @@ from app.common.config import Settings
 from app.common.json_store import JsonStore
 from app.common.logging_utils import log_event, setup_logger
 from app.ingest.audit_runner import ChatHistoryReviewRunner
-from app.ingest.chatgpt_detector import ChatGPTSourceDetector
+from app.ingest.chatgpt_detector import ChatGPTSourceDetector, short_source_id
 
 
 class TelegramReviewBot:
@@ -215,12 +215,24 @@ class TelegramReviewBot:
 
     def _sources_text(self, records) -> str:
         if not records:
-            return "No detected ChatGPT sources."
-        lines = ["Detected sources:"]
+            return "No pending ChatGPT sources."
+        lines = ["Pending ChatGPT sources:"]
         for record in records[:20]:
+            short_id = short_source_id(record.source_id)
             summary = record.rough_summary[:100]
-            lines.append(f"- {record.source_id}: {record.display_name} - {summary}")
+            source_time = self._source_time_hint(record.display_name)
+            lines.append(
+                f"- {short_id}\n"
+                f"  file: {record.display_name}\n"
+                f"  time: {source_time}\n"
+                f"  summary: {summary}\n"
+                f"  review: /review {short_id}"
+            )
         return "\n".join(lines)
+
+    def _source_time_hint(self, display_name: str) -> str:
+        # Most ChatGPT exports start with YYYY-MM-DD or include the date in the filename.
+        return display_name[:10] if len(display_name) >= 10 and display_name[4:5] == "-" else "unknown"
 
     def _review_text(self, source_id: str) -> Tuple[str, str]:
         result = self.runner.review(source_id)
