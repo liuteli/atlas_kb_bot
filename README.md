@@ -1,0 +1,137 @@
+# knowledge-bot
+
+`knowledge-bot` is an independent knowledge ingestion, Telegram review, and Codex handoff system for Atlas knowledge sources.
+
+## Repo Boundary
+
+Repo B is the bot repository:
+
+- Local path: `/Users/liuteli/infra/docker/knowledge-bot`
+- GitHub: `https://github.com/liuteli/atlas_kb_bot.git`
+- Branch contract: `main`
+
+Repo A is the Atlas read-only reference repository:
+
+- Local path: `/Users/liuteli/infra/docker/postgres/atlas`
+- GitHub: `https://github.com/liuteli/atlas.git`
+- Branch contract: `main`
+- Safety rule: never write, stage, commit, move, delete, or patch files in Repo A from this bot.
+
+## GitHub Auth Policy
+
+In the normal local Repo A + SSH remote setup, `GITHUB_TOKEN` is not required.
+The committed-code cache reads Repo A's committed tree with `git archive HEAD`.
+`GITHUB_TOKEN` is reserved only for a future token-based fallback if SSH/local repo access is unavailable.
+
+## Environment
+
+Runtime configuration is read from `.env`. `.env.example` is only a template contract and is never used as live configuration.
+
+```bash
+cp .env.example .env
+chmod 600 .env
+```
+
+Required to run Telegram polling:
+
+- `KB_TELEGRAM_BOT_TOKEN`
+
+Optional but recommended after `/whoami`:
+
+- `KB_ALLOWED_CHAT_IDS`
+
+Reserved for future Codex/OpenAI handoff:
+
+- `OPENAI_MODEL_COMPLEX`
+- `OPENAI_MODEL_NORMAL`
+- `OPENAI_REASONING_EFFORT`
+
+## Docker Startup
+
+This host currently supports legacy Compose:
+
+```bash
+docker-compose config
+docker-compose up -d --build
+docker-compose ps
+docker-compose logs --tail=200
+```
+
+The container runs with `TZ=Asia/Singapore` and mounts `.env` read-only at `/app/.env`.
+
+## CLI Commands
+
+```bash
+python3 -m app.cli init-dirs
+python3 -m app.cli env-audit
+python3 -m app.cli repo-boundary-audit
+python3 -m app.cli cache-refresh --repo atlas --dry-run
+python3 -m app.cli detect
+python3 -m app.cli review <source_id>
+python3 -m app.cli status
+python3 -m app.cli bot --dry-run
+python3 -m app.cli bot
+```
+
+## Telegram Commands
+
+- `/whoami`: return `chat_id`, `user_id`, chat type, and username/title when available.
+- `/sources`: list detected ChatGPT sources.
+- `/review <id>`: run review-only audit.
+- `/status`: list recent review runs.
+
+Use `/whoami` first, copy `chat_id`, then set:
+
+```env
+KB_ALLOWED_CHAT_IDS=<chat_id>
+```
+
+## Logger Contract
+
+Runtime logs are written to `/Users/liuteli/infra/logs/knowledge-bot/YYYY-MM-DD.log` using Singapore calendar days.
+
+Each command logs received and success/failure events with bounded structured fields:
+
+- `ts`
+- `level`
+- `user_id`
+- `chat_id`
+- `username`
+- `event`
+- `command`
+- `source_id`
+- `review_id`
+- `status`
+- `summary`
+
+Tokens, secrets, raw prompts, and raw chat history bodies must never be logged.
+
+## Review Output Contract
+
+Each review writes exactly six core files:
+
+- `summary.md`
+- `extracted_knowledge_inventory.md`
+- `wiki_coverage_matrix.md`
+- `code_consistency_audit.md`
+- `backfill_shortlist.md`
+- `applied_mapping_or_apply_plan.md`
+
+## Backup Contract
+
+Code is protected by git and GitHub, and is also included in the existing Docker config backup because it lives under `/Users/liuteli/infra/docker`.
+
+Current nightly backup does not clearly include all mutable knowledge-bot runtime assets:
+
+- `/Users/liuteli/infra/logs/knowledge-bot`
+- `KB_STATE_ROOT`
+- `KB_REVIEW_OUTPUT_ROOT`
+
+The minimal close-out script is:
+
+```bash
+scripts/backup_knowledge_bot_state.sh --dry-run
+scripts/backup_knowledge_bot_state.sh
+```
+
+This script creates a compact manual bundle for logs, state, and review outputs. Wiring it into the global nightly backup remains a small follow-up and should not change the broader backup framework without a bounded review.

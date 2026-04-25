@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "knowledge-bot"
+version = "0.1.0"
+description = "Knowledge ingestion, Telegram review, and Codex handoff bot."
+requires-python = ">=3.9"
+dependencies = []
+
+[project.scripts]
+knowledge-bot = "app.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
