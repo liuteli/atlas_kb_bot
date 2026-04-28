@@ -82,6 +82,7 @@ python3 -m app.cli bot
 - `/review <id>`: run review-only audit.
 - `/status`: list recent review runs.
 - `/backup_report`: render and send the daily backup and change report immediately.
+- `/backup_report` includes the Obsidian KB NAS tgz path plus tar integrity and curated-vault completeness summary.
 
 ## Daily Backup Report
 
@@ -96,6 +97,8 @@ The report is built from read-only sources:
 - `KB_DB_SCHEMA_DIFF_ROOT`
 - `KB_GITHUB_DIFF_ROOT`
 - recent git logs from `KB_BACKUP_SCRIPTS_ROOT` and `KB_ATLAS_REPO_PATH`
+
+The daily report also summarizes the NAS Obsidian KB tar backup location, whether the tgz is non-empty, whether `tar -tzf` succeeds, whether required curated-vault directories are present, and whether forbidden working/export directories leaked into the archive.
 
 Daily backup report env vars:
 

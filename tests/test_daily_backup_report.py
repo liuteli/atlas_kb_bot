@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 
 from app.common.config import load_settings
-from app.reports.daily_backup_report import DailyBackupReport
+from app.reports.daily_backup_report import DailyBackupReport, _SshInspectionResult
 
 
 class DailyBackupReportTests(unittest.TestCase):
@@ -18,10 +18,12 @@ class DailyBackupReportTests(unittest.TestCase):
                 "[INFO] selected RUN_TS=20260429_033001\n"
                 "[INFO] selected LOCAL_RUN=/tmp/local-run\n"
                 "[INFO] selected NAS_RUN=/tmp/nas-run\n"
+                "[INFO] selected NAS_OBSIDIAN_TGZ=/volume1/backups/knowledge/obsidian-atlas/daily/atlas_20260429_033245.tar.gz\n"
                 "[INFO] selected publisher success timestamp=2026-04-29 04:05:01\n"
                 "[OK] master log final status OK\n"
                 "[OK] local log final status OK\n"
                 "[OK] remote sync log final status OK\n"
+                "[OK] NAS Obsidian tgz integrity OK: /volume1/backups/knowledge/obsidian-atlas/daily/atlas_20260429_033245.tar.gz\n"
                 "[OK] pg_restore list OK: /tmp/atlas.dump\n"
                 "[OK] publisher log present: /tmp/publisher.log\n"
                 "[OK] infra tools backup verified\n"
@@ -62,8 +64,25 @@ class DailyBackupReportTests(unittest.TestCase):
                 f"KB_ATLAS_REPO_PATH={atlas_repo_root}\n",
                 encoding="utf-8",
             )
-            report = DailyBackupReport(load_settings(env)).render()
+            report_builder = DailyBackupReport(load_settings(env))
+            report_builder._inspect_nas_tgz_via_ssh = lambda _path: _SshInspectionResult(  # type: ignore[method-assign]
+                attempted=True,
+                exists_non_empty=True,
+                tar_list_ok=True,
+                size_bytes=12048,
+                top_level_dirs={".obsidian", "00_HOME", "01_BOOK", "02_WIKI", "03_INDEX", "31_SCHEMAS", "40_ATTACHMENTS", "copilot"},
+                detail="SSH inspection passed",
+                stdout="",
+                stderr="",
+            )
+            report = report_builder.render()
             self.assertIn("FINAL_STATUS=OK", report)
+            self.assertIn("Obsidian KB Tar Backup", report)
+            self.assertIn("NAS tgz:", report)
+            self.assertIn("tar list: OK", report)
+            self.assertIn("Required dirs: OK", report)
+            self.assertIn("Forbidden working dirs: none", report)
+            self.assertIn("Result: OK", report)
             self.assertIn("DB Schema Changes", report)
             self.assertIn("Code Changes", report)
             self.assertIn("Action Required", report)
