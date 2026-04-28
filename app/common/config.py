@@ -14,6 +14,9 @@ CANONICAL_ENV_CONTRACT: Dict[str, Dict[str, str]] = {
     "GITHUB_BOT_BRANCH": {"required": "yes", "category": "bot_repo", "note": "Repo B branch identity"},
     "KB_TELEGRAM_BOT_TOKEN": {"required": "yes_for_bot", "category": "telegram", "note": "required only when starting Telegram polling"},
     "KB_ALLOWED_CHAT_IDS": {"required": "no", "category": "telegram", "note": "optional comma-separated allowlist"},
+    "KB_DAILY_BACKUP_REPORT_ENABLED": {"required": "no", "category": "telegram", "note": "send daily backup report from the running Telegram bot"},
+    "KB_DAILY_BACKUP_REPORT_TIME": {"required": "no", "category": "telegram", "note": "daily backup report send time in Asia/Singapore"},
+    "KB_DAILY_BACKUP_REPORT_CUTOFF": {"required": "no", "category": "telegram", "note": "latest same-day send cutoff in Asia/Singapore"},
     "OPENAI_MODEL_COMPLEX": {"required": "reserved", "category": "codex_openai", "note": "reserved for future Codex handoff"},
     "OPENAI_MODEL_NORMAL": {"required": "reserved", "category": "codex_openai", "note": "reserved for future Codex handoff"},
     "OPENAI_REASONING_EFFORT": {"required": "reserved", "category": "codex_openai", "note": "reserved for future Codex handoff"},
@@ -28,6 +31,10 @@ CANONICAL_ENV_CONTRACT: Dict[str, Dict[str, str]] = {
     "KB_REVIEW_OUTPUT_ROOT": {"required": "yes", "category": "state_logs", "note": "review output root"},
     "KB_LOG_ROOT": {"required": "yes", "category": "state_logs", "note": "bot log root"},
     "KB_NAS_ARCHIVE_ROOT": {"required": "no", "category": "archive", "note": "reserved optional archive root"},
+    "KB_BACKUP_LOG_ROOT": {"required": "no", "category": "backup_report", "note": "readonly backup log root for daily report"},
+    "KB_BACKUP_SCRIPTS_ROOT": {"required": "no", "category": "backup_report", "note": "readonly backup scripts repo for daily report"},
+    "KB_DB_SCHEMA_DIFF_ROOT": {"required": "no", "category": "backup_report", "note": "db schema diff artifact root for daily report"},
+    "KB_GITHUB_DIFF_ROOT": {"required": "no", "category": "backup_report", "note": "github diff artifact root for daily report"},
 }
 
 
@@ -83,8 +90,15 @@ class Settings:
     nas_archive_root: Path
     telegram_bot_token: Optional[str]
     allowed_chat_ids: List[str]
+    daily_backup_report_enabled: bool
+    daily_backup_report_time: str
+    daily_backup_report_cutoff: str
     keep_commit_snapshots: bool
     allow_atlas_readonly_fallback: bool
+    backup_log_root: Path
+    backup_scripts_root: Path
+    db_schema_diff_root: Path
+    github_diff_root: Path
 
     def ensure_runtime_dirs(self) -> None:
         """Create writable runtime directories owned by this bot."""
@@ -160,6 +174,29 @@ def load_settings(env_path: Optional[Path] = None) -> Settings:
         )),
         telegram_bot_token=_get("KB_TELEGRAM_BOT_TOKEN", "", env_file) or None,
         allowed_chat_ids=_list("KB_ALLOWED_CHAT_IDS", env_file),
+        daily_backup_report_enabled=_bool("KB_DAILY_BACKUP_REPORT_ENABLED", True, env_file),
+        daily_backup_report_time=_get("KB_DAILY_BACKUP_REPORT_TIME", "08:05", env_file),
+        daily_backup_report_cutoff=_get("KB_DAILY_BACKUP_REPORT_CUTOFF", "12:00", env_file),
         keep_commit_snapshots=_bool("KB_KEEP_COMMIT_SNAPSHOTS", True, env_file),
         allow_atlas_readonly_fallback=_bool("KB_ALLOW_ATLAS_READONLY_FALLBACK", True, env_file),
+        backup_log_root=Path(_get(
+            "KB_BACKUP_LOG_ROOT",
+            "/Users/liuteli/infra/backups/logs",
+            env_file,
+        )),
+        backup_scripts_root=Path(_get(
+            "KB_BACKUP_SCRIPTS_ROOT",
+            "/Users/liuteli/infra/backups/scripts",
+            env_file,
+        )),
+        db_schema_diff_root=Path(_get(
+            "KB_DB_SCHEMA_DIFF_ROOT",
+            str(knowledge_local / "21_STAGING/db-schema-diffs"),
+            env_file,
+        )),
+        github_diff_root=Path(_get(
+            "KB_GITHUB_DIFF_ROOT",
+            str(knowledge_local / "21_STAGING/github-diffs/atlas"),
+            env_file,
+        )),
     )

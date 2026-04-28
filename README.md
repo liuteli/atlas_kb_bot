@@ -58,6 +58,7 @@ docker-compose logs --tail=200
 ```
 
 The container runs with `TZ=Asia/Singapore` and mounts `.env` read-only at `/app/.env`.
+The backup report feature also needs a read-only mount for `/Users/liuteli/infra/backups`.
 
 ## CLI Commands
 
@@ -68,6 +69,7 @@ python3 -m app.cli repo-boundary-audit
 python3 -m app.cli cache-refresh --repo atlas --dry-run
 python3 -m app.cli detect
 python3 -m app.cli review <source_id>
+python3 -m app.cli backup-report --dry-run
 python3 -m app.cli status
 python3 -m app.cli bot --dry-run
 python3 -m app.cli bot
@@ -79,6 +81,31 @@ python3 -m app.cli bot
 - `/sources`: list detected ChatGPT sources.
 - `/review <id>`: run review-only audit.
 - `/status`: list recent review runs.
+- `/backup_report`: render and send the daily backup and change report immediately.
+
+## Daily Backup Report
+
+The existing long-polling Telegram bot sends a daily backup report at `08:05` Asia/Singapore from inside the bot process. It does not use `launchd`, cron, or a separate scheduler.
+
+Automatic sends go to all `KB_ALLOWED_CHAT_IDS`. If the bot was offline at `08:05`, it sends once on the next scheduler check after `08:05` and before the same-day cutoff at `12:00`.
+
+The report is built from read-only sources:
+
+- `/Users/liuteli/infra/backups/logs/nightly_backup_verify_latest.log`
+- `/Users/liuteli/infra/backups/logs/atlas_icloud_publisher.log`
+- `KB_DB_SCHEMA_DIFF_ROOT`
+- `KB_GITHUB_DIFF_ROOT`
+- recent git logs from `KB_BACKUP_SCRIPTS_ROOT` and `KB_ATLAS_REPO_PATH`
+
+Daily backup report env vars:
+
+- `KB_DAILY_BACKUP_REPORT_ENABLED=1`
+- `KB_DAILY_BACKUP_REPORT_TIME=08:05`
+- `KB_DAILY_BACKUP_REPORT_CUTOFF=12:00`
+- `KB_BACKUP_LOG_ROOT=/Users/liuteli/infra/backups/logs`
+- `KB_BACKUP_SCRIPTS_ROOT=/Users/liuteli/infra/backups/scripts`
+- `KB_DB_SCHEMA_DIFF_ROOT=/Users/liuteli/infra/knowledge_local/obsidian-main/atlas/21_STAGING/db-schema-diffs`
+- `KB_GITHUB_DIFF_ROOT=/Users/liuteli/infra/knowledge_local/obsidian-main/atlas/21_STAGING/github-diffs/atlas`
 
 Use `/whoami` first, copy `chat_id`, then set:
 

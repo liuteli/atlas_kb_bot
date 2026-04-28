@@ -11,6 +11,7 @@ from app.common.logging_utils import log_event, setup_logger
 from app.common.subprocess_utils import run_cmd
 from app.ingest.audit_runner import ChatHistoryReviewRunner
 from app.ingest.chatgpt_detector import ChatGPTSourceDetector, short_source_id
+from app.reports.daily_backup_report import DailyBackupReport
 
 
 def _env_keys(path: Path) -> list[str]:
@@ -33,6 +34,9 @@ def main() -> None:
 
     review = sub.add_parser("review")
     review.add_argument("source_id_or_path")
+
+    backup_report = sub.add_parser("backup-report")
+    backup_report.add_argument("--dry-run", action="store_true", help="render the daily backup report without sending Telegram")
 
     archive = sub.add_parser("archive-source")
     archive.add_argument("source_ids", nargs="+")
@@ -105,6 +109,11 @@ def main() -> None:
             print(f"fallback_reason: {result.fallback_reason}")
         return
 
+    if args.cmd == "backup-report":
+        report = DailyBackupReport(settings).render()
+        print(report)
+        return
+
     if args.cmd == "status":
         path = settings.state_root / "review_runs.json"
         if not path.exists():
@@ -172,6 +181,7 @@ def main() -> None:
                 "bot_startup_preflight": "ok",
                 "telegram_token_configured": bool(settings.telegram_bot_token),
                 "allowed_chat_ids_count": len(settings.allowed_chat_ids),
+                "daily_backup_report_enabled": settings.daily_backup_report_enabled,
                 "registered_commands": TelegramReviewBot.registered_commands(),
                 "log_root": str(settings.log_root),
             }, ensure_ascii=False, indent=2))

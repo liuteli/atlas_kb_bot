@@ -34,6 +34,8 @@ Any Python command that writes files, changes state, sends network requests, app
 - `.env.example` is a template contract only; never read it as live config.
 - Do not commit `.env` or any real token/secret.
 - `GITHUB_TOKEN` is optional for the normal local Repo A + SSH workflow.
+- The 08:05 daily backup report is sent inside the running Telegram bot process, not via LaunchAgent or cron.
+- The bot may read `/Users/liuteli/infra/backups` read-only for backup logs, scripts, and run artifacts.
 
 ## Logging
 

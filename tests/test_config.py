@@ -21,9 +21,11 @@ class ConfigTests(unittest.TestCase):
             self.assertEqual(settings.github_repo_url, "https://github.com/liuteli/atlas.git")
 
     def test_canonical_contract_count(self):
-        self.assertEqual(len(CANONICAL_ENV_CONTRACT), 21)
+        self.assertEqual(len(CANONICAL_ENV_CONTRACT), 28)
         self.assertIn("GITHUB_BOT_REPO_URL", CANONICAL_ENV_CONTRACT)
         self.assertIn("KB_ALLOWED_CHAT_IDS", CANONICAL_ENV_CONTRACT)
+        self.assertIn("KB_DAILY_BACKUP_REPORT_ENABLED", CANONICAL_ENV_CONTRACT)
+        self.assertIn("KB_GITHUB_DIFF_ROOT", CANONICAL_ENV_CONTRACT)
 
 
 if __name__ == "__main__":

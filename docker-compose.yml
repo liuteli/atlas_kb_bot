@@ -8,6 +8,7 @@ services:
     # The app reads /app/.env itself, so compose validation can stay secret-safe.
     volumes:
       - ./.env:/app/.env:ro
+      - /Users/liuteli/infra/backups:/Users/liuteli/infra/backups:ro
       - /Users/liuteli/infra/knowledge:/Users/liuteli/infra/knowledge:ro
       - /Users/liuteli/infra/knowledge_local:/Users/liuteli/infra/knowledge_local
       - /Users/liuteli/infra/docker/postgres/atlas:/Users/liuteli/infra/docker/postgres/atlas:ro
