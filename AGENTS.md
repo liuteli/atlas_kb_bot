@@ -36,6 +36,9 @@ Any Python command that writes files, changes state, sends network requests, app
 - `GITHUB_TOKEN` is optional for the normal local Repo A + SSH workflow.
 - The 08:05 daily backup report is sent inside the running Telegram bot process, not via LaunchAgent or cron.
 - The bot may read `/Users/liuteli/infra/backups` read-only for backup logs, scripts, and run artifacts.
+- Treat `atlas-icloud-publisher publish-db-schema done` as the publisher success marker.
+- Treat `stage obsidian vault done duration_ms=... result=ok` as the Obsidian staging success marker.
+- The active vault source for backup reporting is `/Users/liuteli/Library/Mobile Documents/iCloud~md~obsidian/Documents/atlas`.
 
 ## Logging
 

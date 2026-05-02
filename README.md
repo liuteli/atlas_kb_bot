@@ -99,6 +99,8 @@ The report is built from read-only sources:
 - recent git logs from `KB_BACKUP_SCRIPTS_ROOT` and `KB_ATLAS_REPO_PATH`
 
 The daily report also summarizes the NAS Obsidian KB tar backup location, whether the tgz is non-empty, whether `tar -tzf` succeeds, whether required curated-vault directories are present, and whether forbidden working/export directories leaked into the archive.
+Publisher success is keyed from `atlas-icloud-publisher publish-db-schema done`, and Obsidian staging success is keyed from `stage obsidian vault done duration_ms=... result=ok`.
+The active vault source contract for that report is `/Users/liuteli/Library/Mobile Documents/iCloud~md~obsidian/Documents/atlas`, staged locally to `/Users/liuteli/infra/backups/staging/obsidian-atlas/atlas` before NAS tar creation.
 
 Daily backup report env vars:
 

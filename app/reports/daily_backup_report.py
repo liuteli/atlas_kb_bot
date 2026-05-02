@@ -14,6 +14,7 @@ MAX_SECTION_LINES = 6
 VERIFY_VALUE_RE = re.compile(r"^\[INFO\] selected ([A-Za-z_ ]+?)=(.+)$")
 SUMMARY_VALUE_RE = re.compile(r"^([A-Z_]+)=(.+)$")
 PUBLISHER_LINE_RE = re.compile(r"^\[(?P<ts>[^\]]+)\] (?P<body>.+)$")
+STAGE_RESULT_RE = re.compile(r"\bresult=(?P<result>\w+)\b")
 DIFF_PATH_RE = re.compile(
     r"^(?:---|\+\+\+) .+/(local|cloud)/schemas/([^/]+)/(tables|views|matviews|functions)/([^/\s]+)\.md"
 )
@@ -23,6 +24,7 @@ RETAINED_DIRS = (".obsidian", "00_HOME", "01_BOOK", "02_WIKI", "03_INDEX", "31_S
 REQUIRED_DIRS = ("00_HOME", "02_WIKI", "03_INDEX")
 FORBIDDEN_DIRS = ("10_SOURCES_RAW", "11_SOURCES_CLEAN", "12_MIRRORS", "20_INBOX", "21_STAGING", "30_TEMPLATES", "99_SYSTEM")
 NAS_SSH_TARGET = "liuteli@192.168.50.10"
+ACTIVE_OBSIDIAN_VAULT_SOURCE = "/Users/liuteli/Library/Mobile Documents/iCloud~md~obsidian/Documents/atlas"
 
 
 @dataclass(frozen=True)
@@ -64,8 +66,18 @@ class CodeDiffSummary:
 
 
 @dataclass(frozen=True)
+class PublisherLogSummary:
+    publish_db_schema_done_ts: Optional[str]
+    stage_obsidian_done_ts: Optional[str]
+    stage_obsidian_result: Optional[str]
+    stage_source: Optional[str]
+
+
+@dataclass(frozen=True)
 class ObsidianTarSummary:
     path: str
+    active_vault_source: str
+    staging_status: str
     verifier_result: str
     direct_inspect_status: str
     exists_non_empty: str
@@ -89,8 +101,9 @@ class DailyBackupReport:
 
     def render(self) -> str:
         verify = self._parse_verify_log(self.settings.backup_log_root / "nightly_backup_verify_latest.log")
-        publisher_done_ts = self._parse_publisher_done_timestamp(self.settings.backup_log_root / "atlas_icloud_publisher.log")
-        obsidian_tgz = self.summarize_obsidian_kb_tgz(verify)
+        publisher = self._parse_publisher_log(self.settings.backup_log_root / "atlas_icloud_publisher.log")
+        publisher_done_ts = publisher.publish_db_schema_done_ts or verify.publisher_success_ts
+        obsidian_tgz = self.summarize_obsidian_kb_tgz(verify, publisher)
         schema = self._parse_schema_diff(self._latest_artifact_path(self.settings.db_schema_diff_root))
         code = self._parse_code_diff(self._latest_artifact_path(self.settings.github_diff_root))
         backup_script_commits = self._git_log_since(self.settings.backup_scripts_root)
@@ -105,8 +118,10 @@ class DailyBackupReport:
             f"- RUN_TS={verify.run_ts}",
             f"- publisher_success_ts={verify.publisher_success_ts}",
         ]
-        if publisher_done_ts and publisher_done_ts != verify.publisher_success_ts:
-            overall_lines.append(f"- publisher_done_ts={publisher_done_ts}")
+        if publisher.publish_db_schema_done_ts:
+            overall_lines.append(f"- publish-db-schema done: {publisher.publish_db_schema_done_ts}")
+        if publisher.stage_obsidian_done_ts:
+            overall_lines.append(f"- stage-obsidian-vault done: {publisher.stage_obsidian_done_ts}")
 
         backup_lines = [
             f"- main backup: {verify.main_backup_status}",
@@ -115,6 +130,7 @@ class DailyBackupReport:
             f"- Postgres dump sanity: {verify.postgres_dump_sanity}",
             f"- tools backup sanity: {verify.tools_backup_sanity}",
             f"- iCloud publisher sanity: {verify.icloud_publisher_sanity}",
+            f"- Obsidian staging: {obsidian_tgz.staging_status}",
             f"- verifier log: {self.settings.backup_log_root / 'nightly_backup_verify_latest.log'}",
         ]
 
@@ -156,14 +172,24 @@ class DailyBackupReport:
         ]
         return "\n".join(sections)
 
-    def summarize_obsidian_kb_tgz(self, verify: VerifySummary) -> ObsidianTarSummary:
+    def summarize_obsidian_kb_tgz(self, verify: VerifySummary, publisher: PublisherLogSummary) -> ObsidianTarSummary:
         tgz_path = verify.nas_obsidian_tgz
+        staging_status = "unknown"
+        if publisher.stage_obsidian_result:
+            stage_result = publisher.stage_obsidian_result.lower()
+            if stage_result == "ok":
+                staging_status = f"OK ({publisher.stage_obsidian_done_ts})"
+            else:
+                staging_status = f"FAIL ({publisher.stage_obsidian_done_ts})"
+        active_vault_source = ACTIVE_OBSIDIAN_VAULT_SOURCE
         verifier_result = (
             "NAS Obsidian tgz integrity OK" if verify.nas_obsidian_tgz_integrity == "OK" else "NAS Obsidian tgz integrity not confirmed"
         )
         if not tgz_path or tgz_path == "unknown":
             return ObsidianTarSummary(
                 path="unknown",
+                active_vault_source=active_vault_source,
+                staging_status=staging_status,
                 verifier_result="NAS tgz path not found in verifier log",
                 direct_inspect_status="WARN",
                 exists_non_empty="unknown",
@@ -223,6 +249,8 @@ class DailyBackupReport:
 
         return ObsidianTarSummary(
             path=tgz_path,
+            active_vault_source=active_vault_source,
+            staging_status=staging_status,
             verifier_result=verifier_result,
             direct_inspect_status=direct_inspect_status,
             exists_non_empty=exists_non_empty,
@@ -295,16 +323,52 @@ class DailyBackupReport:
             nas_obsidian_tgz_integrity=statuses.get("nas_obsidian_tgz_integrity", "unknown"),
         )
 
-    def _parse_publisher_done_timestamp(self, path: Path) -> Optional[str]:
+    def _parse_publisher_log(self, path: Path) -> PublisherLogSummary:
         if not path.exists():
-            return None
-        for line in reversed(path.read_text(encoding="utf-8", errors="replace").splitlines()):
+            return PublisherLogSummary(None, None, None, None)
+
+        publish_db_schema_done_ts: Optional[str] = None
+        stage_obsidian_done_ts: Optional[str] = None
+        stage_obsidian_result: Optional[str] = None
+        stage_source: Optional[str] = None
+        current_mode: Optional[str] = None
+        current_stage_source: Optional[str] = None
+
+        for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
             match = PUBLISHER_LINE_RE.match(line.strip())
             if not match:
                 continue
-            if "atlas-icloud-publisher done" in match.group("body"):
-                return match.group("ts")
-        return None
+            ts = match.group("ts")
+            body = match.group("body")
+            if body == "stage obsidian vault start":
+                current_mode = "stage"
+                current_stage_source = None
+                continue
+            if body == "atlas-icloud-publisher publish-db-schema start":
+                current_mode = "publish"
+                continue
+            if body.startswith("source=") and current_mode == "stage" and current_stage_source is None:
+                current_stage_source = body.removeprefix("source=")
+                continue
+            if body.startswith("stage obsidian vault done"):
+                stage_obsidian_done_ts = ts
+                result_match = STAGE_RESULT_RE.search(body)
+                stage_obsidian_result = result_match.group("result") if result_match else None
+                stage_source = current_stage_source
+                current_mode = None
+                current_stage_source = None
+                continue
+            if body == "atlas-icloud-publisher publish-db-schema done":
+                publish_db_schema_done_ts = ts
+                current_mode = None
+                continue
+
+        return PublisherLogSummary(
+            publish_db_schema_done_ts=publish_db_schema_done_ts,
+            stage_obsidian_done_ts=stage_obsidian_done_ts,
+            stage_obsidian_result=stage_obsidian_result,
+            stage_source=stage_source,
+        )
 
     def _parse_schema_diff(self, path: Path) -> SchemaDiffSummary:
         if not path.exists():
@@ -371,6 +435,8 @@ class DailyBackupReport:
 
     def _obsidian_tgz_section_lines(self, summary: ObsidianTarSummary) -> List[str]:
         lines = [f"- NAS tgz: {summary.path}"]
+        lines.append(f"- Active vault source: {summary.active_vault_source}")
+        lines.append(f"- Obsidian staging: {summary.staging_status}")
         lines.append(f"- Verifier result: {summary.verifier_result}")
         if summary.size_bytes is not None:
             lines.append(f"- Size: {summary.size_bytes} bytes")
@@ -392,7 +458,7 @@ class DailyBackupReport:
             lines.append(f"- Archive shape: FAIL — {summary.archive_shape_warning}")
         lines.append(f"- Direct inspect: {summary.direct_inspect_status}")
         lines.append(f"- Result: {summary.result}")
-        return lines[:11]
+        return lines[:12]
 
     def _schema_section_lines(self, summary: SchemaDiffSummary) -> List[str]:
         lines: List[str] = []
@@ -437,6 +503,8 @@ class DailyBackupReport:
             actions.append(f"- Clear WARN_COUNT={verify.warn_count}.")
         if verify.error_count != "0":
             actions.append(f"- Clear ERROR_COUNT={verify.error_count}.")
+        if not obsidian_tgz.staging_status.startswith("OK"):
+            actions.append("- Check atlas-icloud-publisher stage-obsidian-vault status.")
         if obsidian_tgz.result != "OK":
             detail_parts = []
             if obsidian_tgz.missing_required_dirs:

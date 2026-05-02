@@ -33,7 +33,11 @@ class DailyBackupReportTests(unittest.TestCase):
                 encoding="utf-8",
             )
             (backup_logs / "atlas_icloud_publisher.log").write_text(
-                "[2026-04-29 04:05:01] atlas-icloud-publisher done\n",
+                "[2026-04-29 03:32:43] stage obsidian vault start\n"
+                "[2026-04-29 03:32:43] source=/Users/liuteli/Library/Mobile Documents/iCloud~md~obsidian/Documents/atlas\n"
+                "[2026-04-29 03:32:43] stage obsidian vault done duration_ms=253 result=ok\n"
+                "[2026-04-29 04:05:01] atlas-icloud-publisher publish-db-schema start\n"
+                "[2026-04-29 04:05:01] atlas-icloud-publisher publish-db-schema done\n",
                 encoding="utf-8",
             )
             db_diff_root = root / "db-schema-diffs"
@@ -79,6 +83,9 @@ class DailyBackupReportTests(unittest.TestCase):
             self.assertIn("FINAL_STATUS=OK", report)
             self.assertIn("Obsidian KB Tar Backup", report)
             self.assertIn("NAS tgz:", report)
+            self.assertIn("Active vault source: /Users/liuteli/Library/Mobile Documents/iCloud~md~obsidian/Documents/atlas", report)
+            self.assertIn("Obsidian staging: OK (2026-04-29 03:32:43)", report)
+            self.assertIn("publish-db-schema done: 2026-04-29 04:05:01", report)
             self.assertIn("tar list: OK", report)
             self.assertIn("Required dirs: OK", report)
             self.assertIn("Forbidden working dirs: none", report)
