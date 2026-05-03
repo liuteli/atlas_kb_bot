@@ -45,6 +45,12 @@ Any Python command that writes files, changes state, sends network requests, app
 - A plain `docker compose restart knowledge-bot` is only for env/config/runtime-only restarts.
 - Use `docker compose exec -T knowledge-bot python3 -m app.cli backup-report --dry-run` for production backup-report validation.
 - If the verifier confirms real curated vault content, an unavailable direct SSH inspect is informational and should not downgrade Obsidian KB tar status.
+- Raw source lifecycle is `detect -> review -> archive-source`.
+- External Codex review pack lifecycle is `21_STAGING/chat-history-review/<pack> -> archive-external-review-pack -> 11_SOURCES_CLEAN/chat-history-review/completed/<pack>`.
+- External Codex review packs are not Telegram `/review` outputs.
+- `archive-external-review-pack` does not edit curated Obsidian and does not alter the raw-source manifest.
+- Raw chat must not be wholesale-ingested into Obsidian.
+- After closing an external review pack, active staging should not retain that completed pack.
 
 ## Logging
 

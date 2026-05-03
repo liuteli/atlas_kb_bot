@@ -11,6 +11,7 @@ from app.common.logging_utils import log_event, setup_logger
 from app.common.subprocess_utils import run_cmd
 from app.ingest.audit_runner import ChatHistoryReviewRunner
 from app.ingest.chatgpt_detector import ChatGPTSourceDetector, short_source_id
+from app.ingest.external_review_pack_archiver import ExternalReviewPackArchiver, ExternalReviewPackArchiveError
 from app.reports.daily_backup_report import DailyBackupReport
 
 
@@ -42,6 +43,9 @@ def main() -> None:
     archive.add_argument("source_ids", nargs="+")
     archive.add_argument("--reason", default="manual_completed_by_user")
     archive.add_argument("--operator", default="codex")
+
+    archive_external = sub.add_parser("archive-external-review-pack")
+    archive_external.add_argument("pack_dir")
 
     sub.add_parser("status")
     sub.add_parser("env-audit")
@@ -98,6 +102,23 @@ def main() -> None:
                 summary=f"reason={args.reason} operator={args.operator}",
             )
         print(json.dumps({"archived": archived}, ensure_ascii=False, indent=2))
+        return
+
+    if args.cmd == "archive-external-review-pack":
+        archiver = ExternalReviewPackArchiver(
+            settings.knowledge_local_root,
+            settings.chatgpt_export_root,
+            settings.state_root,
+        )
+        try:
+            result = archiver.archive_pack(Path(args.pack_dir))
+        except ExternalReviewPackArchiveError as exc:
+            raise SystemExit(str(exc)) from exc
+        print(f"source pack: {result.source_pack}")
+        print(f"destination pack: {result.destination_pack}")
+        print(f"moved session note: {result.moved_session_note if result.moved_session_note else 'none'}")
+        print(f"status file: {result.status_path}")
+        print("final result: archived external review pack")
         return
 
     if args.cmd == "review":

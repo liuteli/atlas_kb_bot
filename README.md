@@ -77,7 +77,10 @@ python3 -m app.cli repo-boundary-audit
 python3 -m app.cli cache-refresh --repo atlas --dry-run
 python3 -m app.cli detect
 python3 -m app.cli review <source_id>
+python3 -m app.cli archive-source <source_id>
+python3 -m app.cli archive-external-review-pack <pack_dir>
 python3 -m app.cli status
+python3 -m app.cli backup-report --dry-run
 python3 -m app.cli bot --dry-run
 python3 -m app.cli bot
 ```
@@ -96,6 +99,33 @@ docker compose exec -T knowledge-bot python3 -m app.cli backup-report --dry-run
 - `/status`: list recent review runs.
 - `/backup_report`: render and send the daily backup and change report immediately.
 - `/backup_report` includes the Obsidian KB NAS tgz path plus tar integrity and curated-vault completeness summary.
+
+## Source Lifecycles
+
+Raw source lifecycle:
+
+```text
+detect -> review -> archive-source
+```
+
+- `archive-source` marks the raw source manifest state as archived.
+- `archive-source` does not delete or move raw ChatGPT export files.
+
+External Codex review pack lifecycle:
+
+```text
+21_STAGING/chat-history-review/<pack>
+-> archive-external-review-pack
+-> 11_SOURCES_CLEAN/chat-history-review/completed/<pack>
+```
+
+- This is a new explicit convention for external Codex-generated review packs.
+- These packs are not Telegram `/review` outputs.
+- `archive-external-review-pack` only closes the external review pack lifecycle.
+- `archive-external-review-pack` does not edit curated Obsidian.
+- `archive-external-review-pack` does not alter the raw-source manifest.
+- Raw chat must not be wholesale-ingested into Obsidian.
+- Active staging should not retain completed external review packs.
 
 ## Daily Backup Report
 
@@ -164,6 +194,10 @@ Each review writes exactly six core files:
 - `code_consistency_audit.md`
 - `backfill_shortlist.md`
 - `applied_mapping_or_apply_plan.md`
+
+External Codex-generated chat-history review packs are separate artifacts under `21_STAGING/chat-history-review/`.
+They are closed into `11_SOURCES_CLEAN/chat-history-review/completed/` with `python3 -m app.cli archive-external-review-pack <pack_dir>`.
+This command archives the external pack directory and any matching staging-root session note, writes a `_STATUS.md` file, and leaves raw source files plus `chatgpt_sources.json` unchanged.
 
 ## Backup Contract
 
