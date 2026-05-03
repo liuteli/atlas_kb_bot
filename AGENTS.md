@@ -39,6 +39,12 @@ Any Python command that writes files, changes state, sends network requests, app
 - Treat `atlas-icloud-publisher publish-db-schema done` as the publisher success marker.
 - Treat `stage obsidian vault done duration_ms=... result=ok` as the Obsidian staging success marker.
 - The active vault source for backup reporting is `/Users/liuteli/Library/Mobile Documents/iCloud~md~obsidian/Documents/atlas`.
+- Treat `/Users/liuteli/Library/Mobile Documents/com~apple~CloudDocs/Obsidian/atlas` as retired/historical only.
+- The production `knowledge-bot` app code runs from the Docker image; `docker-compose.yml` does not bind-mount repo source into `/app`.
+- After `app/...` code changes, deploy with `docker compose up -d --build --force-recreate knowledge-bot`.
+- A plain `docker compose restart knowledge-bot` is only for env/config/runtime-only restarts.
+- Use `docker compose exec -T knowledge-bot python3 -m app.cli backup-report --dry-run` for production backup-report validation.
+- If the verifier confirms real curated vault content, an unavailable direct SSH inspect is informational and should not downgrade Obsidian KB tar status.
 
 ## Logging
 
@@ -58,7 +64,7 @@ Minimum production startup validation:
 
 ```bash
 docker-compose config
-docker-compose up -d --build
+docker-compose up -d --build --force-recreate knowledge-bot
 docker-compose ps
 docker-compose logs --tail=200
 ```

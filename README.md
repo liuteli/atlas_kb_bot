@@ -52,13 +52,21 @@ This host currently supports legacy Compose:
 
 ```bash
 docker-compose config
-docker-compose up -d --build
+docker-compose up -d --build --force-recreate knowledge-bot
 docker-compose ps
 docker-compose logs --tail=200
 ```
 
 The container runs with `TZ=Asia/Singapore` and mounts `.env` read-only at `/app/.env`.
 The backup report feature also needs a read-only mount for `/Users/liuteli/infra/backups`.
+The application source is baked into the Docker image and `docker-compose.yml` does not bind-mount the repo into `/app`.
+After any `app/...` code change, redeploy with:
+
+```bash
+docker compose up -d --build --force-recreate knowledge-bot
+```
+
+A plain `docker compose restart knowledge-bot` is only for env/config/runtime-only restarts and is not a code deployment.
 
 ## CLI Commands
 
@@ -69,10 +77,15 @@ python3 -m app.cli repo-boundary-audit
 python3 -m app.cli cache-refresh --repo atlas --dry-run
 python3 -m app.cli detect
 python3 -m app.cli review <source_id>
-python3 -m app.cli backup-report --dry-run
 python3 -m app.cli status
 python3 -m app.cli bot --dry-run
 python3 -m app.cli bot
+```
+
+Production dry-run from the running container:
+
+```bash
+docker compose exec -T knowledge-bot python3 -m app.cli backup-report --dry-run
 ```
 
 ## Telegram Commands
@@ -101,6 +114,9 @@ The report is built from read-only sources:
 The daily report also summarizes the NAS Obsidian KB tar backup location, whether the tgz is non-empty, whether `tar -tzf` succeeds, whether required curated-vault directories are present, and whether forbidden working/export directories leaked into the archive.
 Publisher success is keyed from `atlas-icloud-publisher publish-db-schema done`, and Obsidian staging success is keyed from `stage obsidian vault done duration_ms=... result=ok`.
 The active vault source contract for that report is `/Users/liuteli/Library/Mobile Documents/iCloud~md~obsidian/Documents/atlas`, staged locally to `/Users/liuteli/infra/backups/staging/obsidian-atlas/atlas` before NAS tar creation.
+The retired historical path `/Users/liuteli/Library/Mobile Documents/com~apple~CloudDocs/Obsidian/atlas` should not be treated as the live vault.
+Verifier output is the source of truth for the Obsidian KB tar result. If verifier confirms real curated vault content, a direct SSH inspect being skipped or unavailable is informational and should not downgrade the report to `WARN`.
+The recent failure mode was host code patched without rebuilding the container image; rebuilding and force-recreating `knowledge-bot` fixed the report output.
 
 Daily backup report env vars:
 

@@ -24,7 +24,14 @@ KB_REVIEW_OUTPUT_ROOT="${KB_REVIEW_OUTPUT_ROOT:-${KB_STATE_ROOT}/reviews}"
 STAMP="$(date +%Y%m%d_%H%M%S)"
 DEST="${BACKUP_ROOT}/${STAMP}"
 
-echo "knowledge-bot backup destination: ${DEST}"
+cd "${PROJECT_DIR}"
+
+echo "knowledge-bot state backup"
+echo "repo_path: ${PROJECT_DIR}"
+echo "backup_root: ${BACKUP_ROOT}"
+echo "backup_destination: ${DEST}"
+echo "note: source code is baked into the Docker image and is not backed up by this script"
+echo "note: .env and other secrets are not included"
 for target in "${KB_LOG_ROOT}" "${KB_STATE_ROOT}" "${KB_REVIEW_OUTPUT_ROOT}"; do
   if [[ -e "${target}" ]]; then
     echo "include: ${target}"
