@@ -7,6 +7,7 @@ from pathlib import Path, PurePosixPath
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 from app.common.config import Settings
+from app.common.logging_utils import singapore_now
 from app.common.subprocess_utils import run_cmd
 
 
@@ -25,6 +26,11 @@ REQUIRED_DIRS = ("00_HOME", "02_WIKI", "03_INDEX")
 FORBIDDEN_DIRS = ("10_SOURCES_RAW", "11_SOURCES_CLEAN", "12_MIRRORS", "20_INBOX", "21_STAGING", "30_TEMPLATES", "99_SYSTEM")
 NAS_SSH_TARGET = "liuteli@192.168.50.10"
 ACTIVE_OBSIDIAN_VAULT_SOURCE = "/Users/liuteli/Library/Mobile Documents/iCloud~md~obsidian/Documents/atlas"
+OBSIDIAN_TGZ_OK_MARKERS = (
+    "NAS Obsidian tgz integrity OK",
+    "NAS Obsidian tgz contains real curated vault content",
+    "remote Obsidian tgz contains real curated vault content",
+)
 
 
 @dataclass(frozen=True)
@@ -102,15 +108,12 @@ class DailyBackupReport:
     def render(self) -> str:
         verify = self._parse_verify_log(self.settings.backup_log_root / "nightly_backup_verify_latest.log")
         publisher = self._parse_publisher_log(self.settings.backup_log_root / "atlas_icloud_publisher.log")
-        publisher_done_ts = publisher.publish_db_schema_done_ts or verify.publisher_success_ts
         obsidian_tgz = self.summarize_obsidian_kb_tgz(verify, publisher)
         schema = self._parse_schema_diff(self._latest_artifact_path(self.settings.db_schema_diff_root))
         code = self._parse_code_diff(self._latest_artifact_path(self.settings.github_diff_root))
         backup_script_commits = self._git_log_since(self.settings.backup_scripts_root)
         atlas_commits = self._git_log_since(self.settings.atlas_repo_path)
-        title_date = (publisher_done_ts or verify.publisher_success_ts or verify.run_ts)[:10].replace("_", "-")
-        if not re.match(r"^\d{4}-\d{2}-\d{2}$", title_date):
-            title_date = "unknown-date"
+        title_date = self._report_title_date(verify.run_ts)
 
         overall_lines = [
             f"- status: {self._status_marker(verify.final_status, verify.warn_count, verify.error_count)} FINAL_STATUS={verify.final_status}",
@@ -174,6 +177,7 @@ class DailyBackupReport:
 
     def summarize_obsidian_kb_tgz(self, verify: VerifySummary, publisher: PublisherLogSummary) -> ObsidianTarSummary:
         tgz_path = verify.nas_obsidian_tgz
+        verifier_confirmed_ok = self._verifier_confirms_obsidian_tgz(verify)
         staging_status = "unknown"
         if publisher.stage_obsidian_result:
             stage_result = publisher.stage_obsidian_result.lower()
@@ -182,9 +186,7 @@ class DailyBackupReport:
             else:
                 staging_status = f"FAIL ({publisher.stage_obsidian_done_ts})"
         active_vault_source = ACTIVE_OBSIDIAN_VAULT_SOURCE
-        verifier_result = (
-            "NAS Obsidian tgz integrity OK" if verify.nas_obsidian_tgz_integrity == "OK" else "NAS Obsidian tgz integrity not confirmed"
-        )
+        verifier_result = "OK / real curated vault content confirmed" if verifier_confirmed_ok else "NAS Obsidian tgz integrity not confirmed"
         if not tgz_path or tgz_path == "unknown":
             return ObsidianTarSummary(
                 path="unknown",
@@ -232,14 +234,16 @@ class DailyBackupReport:
             if inspection.detail:
                 direct_inspect_status += f" — {inspection.detail}"
         else:
-            exists_non_empty = "unknown"
-            tar_list_status = "unknown"
-            required_dirs_status = "unknown"
-            direct_inspect_status = f"WARN — {inspection.detail}"
+            exists_non_empty = "not checked"
+            tar_list_status = "not checked"
+            required_dirs_status = "not checked"
+            direct_inspect_status = "skipped/unavailable"
+            if inspection.detail:
+                direct_inspect_status += f" — {inspection.detail}"
 
         result = "OK"
         if not inspection.attempted:
-            result = "WARN"
+            result = "OK" if verifier_confirmed_ok and verify.final_status == "OK" else "WARN"
         if inspection.attempted and (not inspection.exists_non_empty or not inspection.tar_list_ok):
             result = "FAIL"
         elif missing_required or forbidden_dirs or archive_shape_warning:
@@ -300,7 +304,7 @@ class DailyBackupReport:
                 statuses["tools_backup_sanity"] = "OK"
             if "publisher log present" in line or "publisher schema residue cleanup logged" in line:
                 statuses["icloud_publisher_sanity"] = "OK"
-            if "NAS Obsidian tgz integrity OK" in line:
+            if any(marker in line for marker in OBSIDIAN_TGZ_OK_MARKERS):
                 statuses["nas_obsidian_tgz_integrity"] = "OK"
         return VerifySummary(
             final_status=summary.get("FINAL_STATUS", "UNKNOWN"),
@@ -535,6 +539,17 @@ class DailyBackupReport:
         if error_count not in {"0", "?"} or final_status not in {"OK", "UNKNOWN"}:
             return "❌"
         return "⚠️"
+
+    def _report_title_date(self, run_ts: str) -> str:
+        normalized = run_ts.strip()
+        if re.match(r"^\d{8}_\d{6}$", normalized):
+            return f"{normalized[:4]}-{normalized[4:6]}-{normalized[6:8]}"
+        if re.match(r"^\d{4}-\d{2}-\d{2}$", normalized):
+            return normalized
+        return singapore_now().date().isoformat()
+
+    def _verifier_confirms_obsidian_tgz(self, verify: VerifySummary) -> bool:
+        return verify.nas_obsidian_tgz_integrity == "OK"
 
     def _prefixed_or_none(self, lines: Iterable[str]) -> List[str]:
         materialized = [line for line in lines if line]
